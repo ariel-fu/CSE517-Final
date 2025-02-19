@@ -30,8 +30,11 @@ from new_llama import LlamaForCausalLM
 import utils
 import re
 import random
+from accelerate import Accelerator
+import pandas as pd
 #from trl import SFTTrainer
 #os.system("echo $PYTORCH_CUDA_ALLOC_CONF")
+os.environ["USE_LIBUV"] = "0"
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -43,6 +46,21 @@ DEFAULT_text_TOKEN = "<text>"
 DEFAULT_Code_TOKEN = "<Code>"
 padding_length = 160
 
+class ArgsConfig:
+    def __init__(self, config):
+        self.config = config
+        self.split_batches = config["split_batches"]
+        self.dispatch_batches = config["dispatch_batches"]
+        self.even_batches = config["even_batches"]
+        self.use_seedable_sampler = config["use_seedable_sampler"]
+        self.non_blocking = config["non_blocking"]
+        self.gradient_accumulation_kwargs = config["gradient_accumulation_kwargs"]
+        self.device_placement = config["device_placement"]
+        self.cpu = config["cpu"]
+       
+    
+    def to_dict(self):
+        return self.config
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
@@ -65,6 +83,8 @@ class TrainingArguments(transformers.TrainingArguments):
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     flash_attn: bool = field(default=False)
+    no_cuda: bool = True
+    device="cpu"
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -135,6 +155,7 @@ def get_data(data_path: str, tokenizer: transformers.PreTrainedTokenizer, templa
 
     if os.path.exists(data_path):
         list_data_dict = []
+        
         with open(data_path, 'r') as f:
             for line in f.readlines():
                 list_data_dict.append(json.loads(line))
@@ -243,6 +264,7 @@ def get_data(data_path: str, tokenizer: transformers.PreTrainedTokenizer, templa
     print("*"*30)
     print(targets[0])
     train_data = [sources[0:ratio],targets[0:ratio]]
+    print(f"\n\n TRAINDATA {train_data[0]} + {len(train_data)}")
     eval_data = [sources[ratio:],targets[ratio:]]
     return train_data,eval_data
 
@@ -254,6 +276,7 @@ class SupervisedDataset(Dataset):
         
         self.sources = data[0]
         self.targets = data[1]
+        print(f"SOURCE {self.sources[0]}, TARGETS {self.targets[0]}")
 
     def __len__(self):
         return len(self.sources)
@@ -285,9 +308,13 @@ class DataCollatorForSupervisedDataset(object):
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
         sources = []
         targets = []
-        for instance in instances:
+        
+        for instance in instances:            
             source = instance['input_ids']
             target = instance['labels']
+            
+            print(f"CALL DATACOLLATOR {instance}, SOURCE {source}, TARGET {target}")
+            
             sources.append(source)
             targets.append(target)
 
@@ -308,32 +335,80 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
     """Make dataset and collator for supervised fine-tuning."""
     train_data,eval_data = get_data(tokenizer=tokenizer, data_path=data_args.data_path,
                                       template_variation=data_args.template_variation)
+    
     train_dataset,eval_dataset = SupervisedDataset(train_data),SupervisedDataset(eval_data)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
-    return dict(train_dataset=train_dataset, eval_dataset=eval_dataset, data_collator=data_collator)
+    output = dict(train_dataset=train_dataset, eval_dataset=eval_dataset, data_collator=data_collator)
+    # print(f"output {output[train_dataset][0]}, {output[data_collator][data_collator]}")
+    return output
 
 
 def train():
     transformers.logging.set_verbosity_info()
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    accelerator = Accelerator(cpu=True)  # Use cpu=True if you're working on CPU
 
-    print('Start Loading Model')
+    # {'split_batches': False, 'dispatch_batches': None, 
+    # 'even_batches': True, 'use_seedable_sampler': True, 
+    # # 'non_blocking': False, 'gradient_accumulation_kwargs': None, 'use_configured_state': False},
+    # training_args.accelerator_config = AcceleratorConfig    
+    # (
+    #     # split_batches=False,
+    #     # dispatch_batches=None,
+    #     # even_batches=True,
+    #     # use_seedable_sampler=True,
+    #     # non_blocking=False,
+    #     # gradient_accumulation_kwargs=None,
+    #     # use_configured_state=False,
+    #     # cpu=True
+    # )
+    
+    # training_args.accelerate_config = Accelerator().state
+    
+    accelerator_config={
+        'split_batches': False, 
+        'dispatch_batches': None, 
+        'even_batches': True, 
+        'use_seedable_sampler': True, 
+        'non_blocking': False, 
+        'gradient_accumulation_kwargs': None,
+        'device_placement': None,
+        'cpu': True
+    }
+    
+    config = ArgsConfig(accelerator_config)
+    
+    # accelerator_config = AcceleratorConfig(
+    # split_batches=False,
+    # dispatch_batches=None,
+    # even_batches=True,
+    # use_seedable_sampler=True,
+    # # non_blocking=False,
+    # # gradient_accumulation_kwargs=None,
+    # cpu=True  # Use CPU
+    # )   
+    # training_args.accelerator_config = accelerator_config
+    # print(f"TRAINING ARGS ACCELERATOR CONFIG {training_args.accelerator_config.type}")
+    training_args.accelerator_config = config
+    print(f'Start Loading Model')
     if training_args.flash_attn:
         model = transformers.AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
-        ).to('cuda')
+        ).to(torch.device("cpu"))
     else:
         model = LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
             torch_dtype=torch.bfloat16,
             attn_implementation='eager',
-        ).to('cuda')
-    print(model)
+        ).to(torch.device("cpu"))
+    # print(model)
+    model = accelerator.prepare(model)
+    
     print('Start building tokenizer')
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
@@ -373,10 +448,46 @@ def train():
     #total_batch = training_args.gradient_accumulation_steps*training_args.per_device_train_batch_size*8
     total_step = training_args.num_train_epochs*len(data_module['train_dataset'].sources)//total_batch
     model.set_total_step(total_step)
-    print(f"total_step:{total_step}")
-    print('Start building the trainer module')
+    model.to(torch.device("cpu"))
+    # print(f"total_step:{total_step}")
+    # print('Start building the trainer module')
     
-    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    # training_args.accelerator_config.cpu = True
+    
+    # print(f"training args {training_args}")
+    
+    # trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module).to(torch.device("cpu"))
+    
+    training_args.use_ipex = False
+    training_args.bf16 = False
+    training_args.use_cpu = True
+    training_args.fp16 = False
+    training_args.no_cuda = True
+    training_args.distributed_state = None
+    
+    # training_args.no_cuda=True
+    training_args.bf16=False # Set bf16=False if not using a GPU
+    training_args.fp16=False  # Set fp16=False if not using a GPU
+    training_args.deepspeed=None  # Ensure deepspeed is not used
+    training_args.fsdp=[]  # Ensure fsdp is not used
+    training_args.ddp_backend=None  # Ensure ddp_backend is not set
+    training_args.logging_dir='./logs'  # Set a directory for logging
+    # print(f"training args {training_args}")
+    
+    # train_dataloader = DataLoader(data_module["train_dataset"], 
+    #                               batch_size=training_args.per_device_train_batch_size,
+    #                               shuffle=True)
+    # eval_dataloader = DataLoader(data_module["eval_dataset"], 
+    #                               batch_size=training_args.per_device_eval_batch_size,
+    #                               shuffle=False)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=data_module["train_dataset"],
+        eval_dataset=data_module["eval_dataset"],
+        processing_class=[tokenizer]
+    )
+    
     trainer.train()
 
     trainer.save_state()
