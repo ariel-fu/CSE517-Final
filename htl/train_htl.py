@@ -14,7 +14,7 @@
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Sequence
+from typing import Optional, Dict, Sequence, List
 import os
 import json
 
@@ -264,7 +264,7 @@ def get_data(data_path: str, tokenizer: transformers.PreTrainedTokenizer, templa
     print("*"*30)
     print(targets[0])
     train_data = [sources[0:ratio],targets[0:ratio]]
-    print(f"\n\n TRAINDATA {train_data[0]} + {len(train_data)}")
+    # print(f"\n\n TRAINDATA {train_data[0]} + {len(train_data)}")
     eval_data = [sources[ratio:],targets[ratio:]]
     return train_data,eval_data
 
@@ -276,17 +276,24 @@ class SupervisedDataset(Dataset):
         
         self.sources = data[0]
         self.targets = data[1]
-        print(f"SOURCE {self.sources[0]}, TARGETS {self.targets[0]}")
+        # print(f"SOURCE {self.sources[0]}, TARGETS {self.targets[0]}")
+        self.column_names = ['input_ids', 'labels']
+        self._signature_columns = ['input_ids', 'labels']    
 
     def __len__(self):
         return len(self.sources)
 
     def naive__getitem__(self, i) -> Dict[str, torch.Tensor]:
+        # print(f"NAIVE GET ITEM {dict(input_ids=self.input_ids[i], labels=self.labels[i])}")
         return dict(input_ids=self.input_ids[i], labels=self.labels[i])
 
     def __getitem__(self, i):
-        return dict(input_ids=self.sources[i], labels=self.targets[i])
+        output = {'input_ids': self.sources[i], 'labels': self.targets[i]}
+        # print(f"GET ITEM {output}")
+        return output
 
+
+    
 @dataclass
 class DataCollatorForSupervisedDataset(object):
     """Collate examples for supervised fine-tuning."""
@@ -299,6 +306,14 @@ class DataCollatorForSupervisedDataset(object):
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
         labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
+        
+        # print(f"NAIVE CALL DATACOLLATOR {dict(
+        #     input_ids=input_ids,
+        #     labels=labels,
+        #     attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
+        # )}")
+
+
         return dict(
             input_ids=input_ids,
             labels=labels,
@@ -313,7 +328,7 @@ class DataCollatorForSupervisedDataset(object):
             source = instance['input_ids']
             target = instance['labels']
             
-            print(f"CALL DATACOLLATOR {instance}, SOURCE {source}, TARGET {target}")
+            # print(f"CALL DATACOLLATOR {instance}, SOURCE {source}, TARGET {target}")
             
             sources.append(source)
             targets.append(target)
@@ -480,12 +495,17 @@ def train():
     # eval_dataloader = DataLoader(data_module["eval_dataset"], 
     #                               batch_size=training_args.per_device_eval_batch_size,
     #                               shuffle=False)
+    
+    test_train = data_module["train_dataset"]
+    print(f"traindataset = {test_train[0]}")
+    data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=data_module["train_dataset"],
         eval_dataset=data_module["eval_dataset"],
-        processing_class=[tokenizer]
+        processing_class=[tokenizer],
+        data_collator=data_collator
     )
     
     trainer.train()
