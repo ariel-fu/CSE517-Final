@@ -332,7 +332,10 @@ def train():
             cache_dir=training_args.cache_dir,
             torch_dtype=torch.bfloat16,
             attn_implementation='eager',
-        ).to('cuda')
+            device_map='cpu',
+            low_cpu_mem_usage=True
+        )
+    model.to(torch.device("cuda"))
     print(model)
     print('Start building tokenizer')
     tokenizer = transformers.AutoTokenizer.from_pretrained(
