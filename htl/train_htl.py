@@ -330,12 +330,12 @@ def train():
         model = LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             attn_implementation='eager',
-            device_map='cpu',
+            device_map="cpu",
             low_cpu_mem_usage=True
         )
-    model.to(torch.device("cuda"))
+    # model.to(torch.device("cuda"))
     print(model)
     print('Start building tokenizer')
     tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -369,8 +369,10 @@ def train():
 
     print('Start building data module')
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
-    worker_nums = int(os.getenv('WORKER_NUM'))
-    num_gpus = int(os.getenv('NUM_GPUS'))
+    # worker_nums = int(os.getenv('WORKER_NUM'))
+    # num_gpus = int(os.getenv('NUM_GPUS'))
+    worker_nums = 1
+    num_gpus = 1
     print(f"worker_nums:{worker_nums}\nevery_gpus:{num_gpus}")
     total_batch = training_args.per_device_train_batch_size*num_gpus*worker_nums
     #total_batch = training_args.gradient_accumulation_steps*training_args.per_device_train_batch_size*8
