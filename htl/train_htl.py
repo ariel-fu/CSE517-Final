@@ -24,12 +24,21 @@ import torch
 import numpy as np
 import transformers
 from torch.utils.data import Dataset
-from transformers import Trainer
+from torch import nn
+from transformers import Trainer, BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
 import pathlib
 from new_llama import LlamaForCausalLM
+from transformers.utils import quantization_config
 import utils
 import re
 import random
+from accelerate import cpu_offload, load_checkpoint_and_dispatch
+import bitsandbytes as bs
+from peft import LoraConfig
+
+from transformers.trainer_pt_utils import get_parameter_names
+from accelerate import Accelerator
+from torch.utils.data.dataloader import DataLoader
 #from trl import SFTTrainer
 #os.system("echo $PYTORCH_CUDA_ALLOC_CONF")
 
@@ -314,28 +323,54 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
 
 
 def train():
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     transformers.logging.set_verbosity_info()
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+
     print('Start Loading Model')
     if training_args.flash_attn:
+        quant_config = BitsAndBytesConfig(load_in_8bit=True)
         model = transformers.AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             attn_implementation="flash_attention_2",
-        ).to('cuda')
+            device_map='cuda',
+            low_cpu_mem_usage=True,
+            quantization_config=quant_config
+        )
     else:
         model = LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             attn_implementation='eager',
-            device_map="cpu",
+            # device_map="cpu",
             low_cpu_mem_usage=True
         )
-    # model.to(torch.device("cuda"))
+
+    # 
+    # lora_config = LoraConfig(
+    #     target_modules=["q_proj", "k_proj"],
+    #     init_lora_weights=False
+    # )
+
+    # model.add_adapter(lora_config, adapter_name="adapter_1")
+
+    # weights_location = training_args.cache_dir
+
+    # print(f"WEIGHTS LOCATION {weights_location}")
+    
+
+    # model = load_checkpoint_and_dispatch(
+    #   model, checkpoint=weights_location, device_map="auto", no_split_module_classes=['Block']
+    # )
+
+    print(f"MODEL DEVICE {model.hf_device_map.values()}")
+    # model = model.quantize(onnx=True)
+
     print(model)
     print('Start building tokenizer')
     tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -344,6 +379,7 @@ def train():
         model_max_length=training_args.model_max_length,
         padding_side=model_args.padding_side,
         use_fast=False,
+        device_map='cpu'
     )
 
     print("*"*50)
@@ -377,13 +413,67 @@ def train():
     total_batch = training_args.per_device_train_batch_size*num_gpus*worker_nums
     #total_batch = training_args.gradient_accumulation_steps*training_args.per_device_train_batch_size*8
     total_step = training_args.num_train_epochs*len(data_module['train_dataset'].sources)//total_batch
-    model.set_total_step(total_step)
+    # model.set_total_step(total_step)
     print(f"total_step:{total_step}")
     print('Start building the trainer module')
     
-    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
-    trainer.train()
+    training_args.gradient_checkpointing=True
+    training_args.fp16=True
+    training_args.per_device_train_batch_size = 1
+    training_args.gradient_accumulation_steps=4
 
+    decay_parameters = get_parameter_names(model, [nn.LayerNorm])
+    decay_parameters = [name for name in decay_parameters if "bias" not in name]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if n in decay_parameters],
+            "weight_decay": training_args.weight_decay,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if n not in decay_parameters],
+            "weight_decay": 0.0,
+        },
+    ]
+
+    optimizer_kwargs = {
+        "betas": (training_args.adam_beta1, training_args.adam_beta2),
+        "eps": training_args.adam_epsilon,
+    }
+    optimizer_kwargs["lr"] = training_args.learning_rate
+    adam_bnb_optim = bs.optim.Adam8bit(
+        optimizer_grouped_parameters,
+        betas=(training_args.adam_beta1, training_args.adam_beta2),
+        eps=training_args.adam_epsilon,
+        lr=training_args.learning_rate,
+    )
+
+
+    # model = cpu_offload(model, execution_device='cuda')
+    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, optimizers=(adam_bnb_optim, None), **data_module)
+    trainer.train()
+    
+
+
+    # train = data_module["train_dataset"]
+    # print(type(train))
+
+    # dataloader = DataLoader(train, batch_size=training_args.per_device_train_batch_size)
+
+    # if training_args.gradient_checkpointing:
+    #     model.gradient_checkpointing_enable()
+
+    # accelerator = Accelerator()
+    # model, optimizer, dataloader = accelerator.prepare(model, adam_bnb_optim, dataloader)
+
+    # model.train()
+    # for step, batch in enumerate(dataloader, start=1):
+    #     loss = model(**batch).loss
+    #     loss = loss / training_args.gradient_accumulation_steps
+    #     accelerator.backward(loss)
+    #     if step % training_args.gradient_accumulation_steps == 0:
+    #         optimizer.step()
+    #         optimizer.zero_grad()
+    # model.save_pretrained(training_args.output_dir)
     trainer.save_state()
     trainer.save_model(output_dir=training_args.output_dir)
 
