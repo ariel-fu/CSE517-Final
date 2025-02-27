@@ -425,7 +425,8 @@ def train():
     training_args.fp16=True
     training_args.per_device_train_batch_size = 1
     training_args.gradient_accumulation_steps=4
-
+    training_args.push_to_hub=True
+    training_args.hub_strategy="all_checkpoints"
     decay_parameters = get_parameter_names(model, [nn.LayerNorm])
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
     optimizer_grouped_parameters = [
