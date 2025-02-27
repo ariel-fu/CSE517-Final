@@ -337,27 +337,29 @@ def train():
             cache_dir=training_args.cache_dir,
             torch_dtype=torch.float16,
             attn_implementation="flash_attention_2",
-            device_map='cuda',
+            device_map='cuda:0',
             low_cpu_mem_usage=True,
             quantization_config=quant_config
         )
     else:
+        quant_config = BitsAndBytesConfig(load_in_8bit=True)
         model = LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
             torch_dtype=torch.bfloat16,
             attn_implementation='eager',
-            # device_map="cpu",
-            low_cpu_mem_usage=True
+            device_map='cuda:0',
+            low_cpu_mem_usage=True,
+            quantization_config=quant_config
         )
 
     # 
-    # lora_config = LoraConfig(
-    #     target_modules=["q_proj", "k_proj"],
-    #     init_lora_weights=False
-    # )
+    lora_config = LoraConfig(
+        target_modules=["q_proj", "k_proj"],
+        init_lora_weights=False
+    )
 
-    # model.add_adapter(lora_config, adapter_name="adapter_1")
+    model.add_adapter(lora_config, adapter_name="adapter_1")
 
     # weights_location = training_args.cache_dir
 
@@ -383,23 +385,25 @@ def train():
     )
 
     print("*"*50)
-    print("Before adding, tokenizer length: ",len(tokenizer))
-    special_tokens_dict = dict()
-    if tokenizer.pad_token is None:
-        special_tokens_dict["pad_token"] = DEFAULT_PAD_TOKEN
-    if tokenizer.eos_token is None:
-        special_tokens_dict["eos_token"] = DEFAULT_EOS_TOKEN
-    if tokenizer.bos_token is None:
-        special_tokens_dict["bos_token"] = DEFAULT_BOS_TOKEN
-    if tokenizer.unk_token is None:
-        special_tokens_dict["unk_token"] = DEFAULT_UNK_TOKEN
-    #tokenizer.add_tokens([DEFAULT_text_TOKEN,DEFAULT_Code_TOKEN])
-    special_tokens_dict['additional_special_tokens'] = [DEFAULT_text_TOKEN,DEFAULT_Code_TOKEN] #32017 #32018
-    smart_tokenizer_and_embedding_resize(
-        special_tokens_dict=special_tokens_dict,
-        tokenizer=tokenizer,
-        model=model,
-    )
+    # print("Before adding, tokenizer length: ",len(tokenizer))
+    # special_tokens_dict = dict()
+    # if tokenizer.pad_token is None:
+    #     special_tokens_dict["pad_token"] = DEFAULT_PAD_TOKEN
+    # if tokenizer.eos_token is None:
+    #     special_tokens_dict["eos_token"] = DEFAULT_EOS_TOKEN
+    # if tokenizer.bos_token is None:
+    #     special_tokens_dict["bos_token"] = DEFAULT_BOS_TOKEN
+    # if tokenizer.unk_token is None:
+    #     special_tokens_dict["unk_token"] = DEFAULT_UNK_TOKEN
+    # #tokenizer.add_tokens([DEFAULT_text_TOKEN,DEFAULT_Code_TOKEN])
+    # special_tokens_dict['additional_special_tokens'] = [DEFAULT_text_TOKEN,DEFAULT_Code_TOKEN] #32017 #32018
+
+    # smart_tokenizer_and_embedding_resize(
+    #     special_tokens_dict=special_tokens_dict,
+    #     tokenizer=tokenizer,
+    #     model=model,
+    # )
+
     print("*"*50)
     print("After adding, tokenizer length: ",len(tokenizer))
 
