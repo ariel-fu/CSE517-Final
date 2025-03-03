@@ -112,9 +112,11 @@ def data_reader(dataset: str):
     decoder = json.JSONDecoder()
 
     if dataset == "aqua":
-        with open('dataset/AQuA/AQuA.json') as f:
+        with open('/content/CSE517-Final/math_eval/dataset/AQuA/AQuA.json') as f:
             lines = f.readlines()
-            for line in lines:
+            # Pick 50 random lines without replacement
+            random_lines = random.sample(lines, 50)
+            for line in random_lines:
                 json_res = decoder.raw_decode(line)[0]
                 choice = "(" + "(".join(json_res["options"])
                 choice = choice.replace("(", " (").replace(")", ") ")
@@ -122,9 +124,11 @@ def data_reader(dataset: str):
                 questions.append(json_res["question"].strip() + "\n" + choice)
                 answers.append(json_res["correct"])
     elif dataset == 'math':
-        with open('dataset/math/MATH.json', 'r') as f:
+        with open('/content/CSE517-Final/math_eval/dataset/math/MATH.json', 'r') as f:
             loaded = json.load(f)
-        for d in loaded:
+        random_items = random.sample(loaded, 20)
+
+        for d in random_items:
             questions.append(d['question'])
             answers.append(d['answer'])
         # import datasets
@@ -150,34 +154,47 @@ def data_reader(dataset: str):
         # answers = answers[22500:]
         # print(len(questions))
     elif dataset == "gsm8k":
-        with open('dataset/gsm8k/gsm8k.jsonl') as f:
-            lines = f.readlines()
-            for line in lines:
-                json_res = decoder.raw_decode(line)[0]
-                questions.append(json_res["question"].strip())
-                answers.append(delete_extra_zero(json_res["answer"].split("#### ")[-1].replace(",", "")))
+      with open('/content/CSE517-Final/math_eval/dataset/gsm8k/gsm8k.jsonl') as f:
+        lines = f.readlines()
+
+        # Pick 50 random lines without replacement
+        random_lines = random.sample(lines, 50)
+
+        for line in random_lines:
+            json_res = json.loads(line)  # No need for decoder, json.loads works directly
+            questions.append(json_res["question"].strip())
+            answers.append(delete_extra_zero(json_res["answer"].split("#### ")[-1].replace(",", "")))
+          
     elif dataset == "mawps":
-        with open('dataset/mawps/test.json') as f:
-            lines = f.readlines()
-            for line in lines:
-                json_res = decoder.raw_decode(line)[0]
-                questions.append(json_res["input"].strip())
-                answers.append(json_res["target"])
+        with open('/content/CSE517-Final/math_eval/dataset/mawps/test.json') as f:
+          lines = f.readlines()
+
+          # Pick 50 random lines without replacement
+          random_lines = random.sample(lines, 50)
+
+          for line in random_lines:
+            json_res = decoder.raw_decode(line)[0]
+            questions.append(json_res["input"].strip())
+            answers.append(json_res["target"])
     elif dataset == "asdiv":
-        with open('dataset/asdiv/test.json') as f:
+        with open('/content/CSE517-Final/math_eval/dataset/asdiv/test.json') as f:
             lines = f.readlines()
-            for line in lines:
+
+            # Pick 50 random lines without replacement
+            random_lines = random.sample(lines, 50)
+            for line in random_lines:
                 json_res = decoder.raw_decode(line)[0]
                 questions.append(json_res["body"].strip()+json_res['question'])
                 answers.append(json_res["answer"].split('(')[0]) 
         # generate train data
     elif dataset == "mathinstruct":
         import datasets
-        list_data_dict = datasets.load_dataset('TIGER-Lab/MathInstruct')["train"]
+        list_data_dict = datasets.load_dataset('/content/CSE517-Final/math_eval/TIGER-Lab/MathInstruct')["train"]
+        random_list = random.sample(list_data_dict, 50)
         count=0
         questions = []
         answers = []
-        for x in list_data_dict:
+        for x in random_list:
             if 'CoT/gsm' in x['source'] or 'CoT/MATH' in x['source']:
                 # single_answers = x['output'].split('The answer is')[-1].strip()
                 # single_answers = single_answers.replace('.','')
@@ -211,9 +228,10 @@ def data_reader(dataset: str):
         # answers = answers[0:100]
 
     elif dataset == "svamp":
-        with open('dataset/SVAMP/SVAMP.json') as f:
+        with open('/content/CSE517-Final/math_eval/dataset/SVAMP/SVAMP.json') as f:
             json_data = json.load(f)
-            for line in json_data:
+            random_items = random.sample(json_data, 50)
+            for line in random_items:
                 q = line["Body"].strip() + " " + line["Question"].strip()
                 a = str(line["Answer"])
                 if a[-2:] == ".0":
@@ -221,18 +239,20 @@ def data_reader(dataset: str):
                 questions.append(q)
                 answers.append(delete_extra_zero(a))
     elif 'mmlu' in dataset:
-        with open(f'dataset/mmlu/{dataset.split("_")[1]}.json') as f:
+        with open(f'/content/CSE517-Final/math_eval/dataset/mmlu/{dataset.split("_")[1]}.json') as f:
             json_data = json.load(f)
-            for line in json_data:
+            random_items = random.sample(json_data, 50)
+            for line in random_items:
                 options = f'(A) {line["choices"][0]} (B) {line["choices"][1]} (C) {line["choices"][2]} (D) {line["choices"][3]}'
                 q = line["question"] + '\n' + 'Answer Choices: ' + options
                 a = ['A', 'B', 'C', 'D'][line['answer']]
                 questions.append(q)
                 answers.append(a)
     elif dataset in ['numglue', 'simuleq', 'deepmind', 'sat']:
-        with open(f'dataset/{dataset}/{dataset}.json') as f:
+        with open(f'/content/CSE517-Final/math_eval/dataset/{dataset}/{dataset}.json') as f:
             json_data = json.load(f)
-            for line in json_data:
+            random_items = random.sample(json_data, 5)
+            for line in random_items:
                 assert isinstance(line['question'], str) and isinstance(line['question'], str), line
                 questions.append(line['question'])
                 answers.append(str(line['answer']))
