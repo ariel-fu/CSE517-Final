@@ -25,7 +25,7 @@ import numpy as np
 import transformers
 from torch.utils.data import Dataset
 from torch import nn
-from transformers import Trainer, BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import Trainer, BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, AdamW, AutoModelForSequenceClassification, TrainerCallback
 import pathlib
 from new_llama import LlamaForCausalLM
 from transformers.utils import quantization_config
@@ -34,7 +34,7 @@ import re
 import random
 from accelerate import cpu_offload, load_checkpoint_and_dispatch
 import bitsandbytes as bs
-from peft import LoraConfig
+from peft import LoraConfig, PeftModel, PeftConfig
 
 from transformers.trainer_pt_utils import get_parameter_names
 from accelerate import Accelerator
@@ -330,6 +330,8 @@ def train():
 
 
     print('Start Loading Model')
+
+    #### UNCOMMENT BELOW SECTION TO LOAD THE MODEL FROM SCRATCH
     if training_args.flash_attn:
         quant_config = BitsAndBytesConfig(load_in_8bit=True)
         model = transformers.AutoModelForCausalLM.from_pretrained(
@@ -352,26 +354,50 @@ def train():
             low_cpu_mem_usage=True,
             quantization_config=quant_config
         )
+        # keep to load the model when starting from scratch
+        model.save_pretrained('/content/my_model_directory', safe_serialization=True)
 
-    # 
+    # Adding and configuring LoRA adapter
     lora_config = LoraConfig(
         target_modules=["q_proj", "k_proj"],
-        init_lora_weights=False
+        init_lora_weights=False  # custom init
     )
-
+    for param in model.parameters():
+        if param.dtype in [torch.float32, torch.float64, torch.float16, torch.complex64, torch.complex128]:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
+    # Add the adapter with the lora_config
     model.add_adapter(lora_config, adapter_name="adapter_1")
 
-    # weights_location = training_args.cache_dir
+    # Now the model and the adapter are fully trainable
 
-    # print(f"WEIGHTS LOCATION {weights_location}")
-    
 
-    # model = load_checkpoint_and_dispatch(
-    #   model, checkpoint=weights_location, device_map="auto", no_split_module_classes=['Block']
+
+    #### BOTTOM SECTION IS USED TO LOAD THE CHECKPOINTED MODEL FROM HF
+    # model_name = "arielfu/htl1"
+    # checkpoint = "checkpoint-3600"
+
+    # model = transformers.AutoModelForCausalLM.from_pretrained(
+    #         "/content/my_model_directory",
+    #         local_files_only=True
     # )
 
-    print(f"MODEL DEVICE {model.hf_device_map.values()}")
-    # model = model.quantize(onnx=True)
+    # # Load the model from the Hugging Face Hub
+    # # model = transformers.AutoModelForCausalLM.from_pretrained(f"{model_name}")
+    # checkpoint_dir = f"{model_name}/{checkpoint}"
+    # checkpoint_dir = "arielfu/htl1"
+    # adapter_config = PeftConfig.from_pretrained(checkpoint_dir)
+    # model = PeftModel.from_pretrained(model, model_id=checkpoint_dir)
+    
+    # # only set requires_grad=True for parameters that are of floating-point types
+    # for param in model.parameters():
+    #     if param.dtype in [torch.float32, torch.float64, torch.float16, torch.complex64, torch.complex128]:
+    #         param.requires_grad = True
+    #     else:
+    #         param.requires_grad = False
+    # model = model.to("cuda:0")
+
 
     print(model)
     print('Start building tokenizer')
@@ -422,11 +448,22 @@ def train():
     print('Start building the trainer module')
     
     training_args.gradient_checkpointing=True
-    training_args.fp16=True
-    training_args.per_device_train_batch_size = 1
-    training_args.gradient_accumulation_steps=4
+    # training_args.fp16=True
+    training_args.per_device_train_batch_size = 4
+    training_args.gradient_accumulation_steps=8
     training_args.push_to_hub=True
     training_args.hub_strategy="all_checkpoints"
+
+    # set for checkpointing
+    # training_args.resume_from_checkpoint=checkpoint_dir
+    
+    training_args.save_strategy="steps"
+    training_args.save_steps=1200
+    # training_args.save_total_limit = 3
+    training_args.max_grad_norm = 1.0
+    training_args.save_model=True
+    training_args.set_push_to_hub("arielfu/htl1")
+    
     decay_parameters = get_parameter_names(model, [nn.LayerNorm])
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
     optimizer_grouped_parameters = [
@@ -452,10 +489,22 @@ def train():
         lr=training_args.learning_rate,
     )
 
+    # tokenizer.save_pretrained("/content/my_local_model")
+    # model.push_to_hub("arielfu/codellama_final32k")
+    # tokenizer.push_to_hub("arielfu/codellama_final32k")
+    # model._set_static_graph(True)
 
     # model = cpu_offload(model, execution_device='cuda')
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, optimizers=(adam_bnb_optim, None), **data_module)
-    trainer.train()
+
+    # RUN THE BELOW TO TRAIN FROM SCRATCH
+    trainer.train(resume_from_checkpoint=False)
+    # trainer.train(resume_from_checkpoint=True)
+
+    # RUN THE BELOW TO TRAIN FROM A CHECKPOINT
+    # trainer.train("codellama_final32k/checkpoint-3600")
+
+
     
 
 
@@ -481,6 +530,7 @@ def train():
     # model.save_pretrained(training_args.output_dir)
     trainer.save_state()
     trainer.save_model(output_dir=training_args.output_dir)
+
 
 
 if __name__ == "__main__":
