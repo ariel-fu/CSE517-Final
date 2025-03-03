@@ -10,7 +10,10 @@ import pdb
 from prompt_utils import *
 from data_loader import BatchDatasetLoader
 from tqdm import tqdm
-from vllm import LLM, SamplingParams
+# from vllm import LLM, SamplingParams
+from transformers import Trainer, BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, AdamW, AutoModelForSequenceClassification, TrainerCallback
+from peft import LoraConfig, PeftModel, PeftConfig
+
 import ray
 ray.init(num_cpus=12)
 
@@ -149,32 +152,58 @@ def run_question_answer(questions: list, groundtruths: list, collect_rerun: bool
 
 
 if __name__ == "__main__":
-    if args.use_vllm:
-        stop_tokens = ["USER:", "USER", "ASSISTANT:", "ASSISTANT", "### Instruction:", "Response:", "Response", "<start_of_turn>", "[INST]"]
-        sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=args.model_max_length, stop=stop_tokens,skip_special_tokens=False)
-        llm = LLM(model=args.model, tensor_parallel_size=torch.cuda.device_count(), dtype=args.dtype, trust_remote_code=True)
-        args.batch_size = -1
-        print('Using VLLM, we do not need to set batch size!')
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.model,
-            padding_side="left",
-            trust_remote_code=True)
-        tokenizer.pad_token_id = 0 if tokenizer.pad_token_id is None else tokenizer.pad_token_id
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model,
-            device_map="auto",
-            load_in_8bit=args.load_8bit,
-            torch_dtype=DTYPES[args.dtype],
-            trust_remote_code=True)
-        
-        # model = AutoModelForCausalLM.from_pretrained(
-        #     args.model,
-        #     device_map="auto",
-        #     load_in_8bit=args.load_8bit,
-        #     torch_dtype=DTYPES[args.dtype],
-        #     trust_remote_code=True)
-        model.eval()
+    # if args.use_vllm:
+    #     stop_tokens = ["USER:", "USER", "ASSISTANT:", "ASSISTANT", "### Instruction:", "Response:", "Response", "<start_of_turn>", "[INST]"]
+    #     sampling_params = SamplingParams(temperature=0, top_p=1, max_tokens=args.model_max_length, stop=stop_tokens,skip_special_tokens=False)
+    #     llm = LLM(model=args.model, tensor_parallel_size=torch.cuda.device_count(), dtype=args.dtype, trust_remote_code=True)
+    #     args.batch_size = -1
+    #     print('Using VLLM, we do not need to set batch size!')
+    # else:
+    # tokenizer = AutoTokenizer.from_pretrained(
+    #     args.model,
+    #     padding_side="left",
+    #     trust_remote_code=True)
+    # tokenizer.pad_token_id = 0 if tokenizer.pad_token_id is None else tokenizer.pad_token_id
+    # model = AutoModelForCausalLM.from_pretrained(
+    #     args.model,
+    #     device_map="auto",
+    #     load_in_8bit=args.load_8bit,
+    #     torch_dtype=DTYPES[args.dtype],
+    #     trust_remote_code=True)
+    # Paths to your saved models
+    base_model_path = "arielfu/htl1"
+    adapter_model_path = "arielfu/codellama_final32k"
+    checkpoint_folder = "checkpoint-3600"
+
+    # Quantization config
+    quant_config = BitsAndBytesConfig(load_in_8bit=True)
+
+    # Load the base LLaMA model
+    base_model = LlamaForCausalLM.from_pretrained(
+        base_model_path,
+        torch_dtype=torch.bfloat16,
+        attn_implementation='eager',
+        device_map='cuda:0',
+        low_cpu_mem_usage=True,
+        quantization_config=quant_config
+    )
+
+    # Load the LoRA adapter on top of the base model
+    model = PeftModel.from_pretrained(
+      base_model, 
+      adapter_model_path,
+      subfolder=checkpoint_folder  
+    )
+
+    # Load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    # # model = AutoModelForCausalLM.from_pretrained(
+    #     args.model,
+    #     device_map="auto",
+    #     load_in_8bit=args.load_8bit,
+    #     torch_dtype=DTYPES[args.dtype],
+    #     trust_remote_code=True)
+    model.eval()
 
     correct, wrong = 0, 0
     if not args.output:
@@ -211,8 +240,11 @@ if __name__ == "__main__":
                 returned_values += pot_values
                 print('cot-----------------------')
                 pot_questions = utils.process_question_with_flan_tag(pot_questions, "")
-                tmp = run_question_answer(pot_questions, pot_groundtruths, collect_rerun=False,pot_return=False)
-                returned_values += tmp
+                try:
+                    tmp = run_question_answer(pot_questions, pot_groundtruths, collect_rerun=False, pot_return=False)
+                    returned_values += tmp
+                except Exception as e:
+                    print(f"An error occurred while running question-answering: {e}")
         else:
             # only cot_prompt or pot_prompt, then we don't need to rerun
             returned_values = run_question_answer(processed_questions, groundtruths, collect_rerun=False)
