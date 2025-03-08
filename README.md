@@ -1,5 +1,5 @@
 
-# **Human Think Language** 
+# **Human Think Language Reproduction** 
 This repo contains the code and data for "[How Do Humans Write Code? Large Models Do It the Same Way Too](https://arxiv.org/pdf/2402.15729)"
 
 The original authors released their CodeLlama model at: https://huggingface.co/seamoke111/HTL-CodeLlama-7B.
