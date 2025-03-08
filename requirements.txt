@@ -1,14 +1,14 @@
+accelerate
+datasets
+huggingface-hub
 numpy
-fire
-torch
-sentencepiece
+pandas
 tokenizers
+torchaudio
+torchvision
+transformers
 wandb
-accelerate
-deepspeed
-accelerate
-evaluate
-tqdm
-wandb
-vllm
-transformers==4.39.2
+bitsandbytes
+flash-attn --no-build-isolation
+peft
+ray
