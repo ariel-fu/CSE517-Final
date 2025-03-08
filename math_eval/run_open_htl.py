@@ -171,7 +171,7 @@ if __name__ == "__main__":
     #     torch_dtype=DTYPES[args.dtype],
     #     trust_remote_code=True)
     # Paths to your saved models
-    base_model_path = "arielfu/htl1"
+    base_model_path = "arielfu/reproduced-htl"
     adapter_model_path = "arielfu/codellama_final32k"
     checkpoint_folder = "checkpoint-3600"
 
