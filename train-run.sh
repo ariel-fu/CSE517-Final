@@ -1,4 +1,5 @@
- python -m torch.distributed.run \
+huggingface-cli login
+python -m torch.distributed.run \
  --nproc_per_node=1 \
  --master_port=6066 \
  --nnodes=1 \
