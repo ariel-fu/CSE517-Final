@@ -1,6 +1,6 @@
 accelerate
 datasets
-huggingface-hub
+huggingface_hub
 numpy
 pandas
 tokenizers
