@@ -332,31 +332,46 @@ def train():
     print('Start Loading Model')
 
     #### UNCOMMENT BELOW SECTION TO LOAD THE MODEL FROM SCRATCH
-    if training_args.flash_attn:
-        quant_config = BitsAndBytesConfig(load_in_8bit=True)
-        model = transformers.AutoModelForCausalLM.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=training_args.cache_dir,
-            torch_dtype=torch.float16,
-            attn_implementation="flash_attention_2",
-            device_map='cuda:0',
-            low_cpu_mem_usage=True,
-            quantization_config=quant_config
-        )
-    else:
-        quant_config = BitsAndBytesConfig(load_in_8bit=True)
-        model = LlamaForCausalLM.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=training_args.cache_dir,
-            torch_dtype=torch.bfloat16,
-            attn_implementation='eager',
-            device_map='cuda:0',
-            low_cpu_mem_usage=True,
-            quantization_config=quant_config
-        )
+    # if training_args.flash_attn:
+    #    quant_config = BitsAndBytesConfig(load_in_8bit=True)
+    #    model = transformers.AutoModelForCausalLM.from_pretrained(
+    #        model_args.model_name_or_path,
+    #        cache_dir=training_args.cache_dir,
+    #        torch_dtype=torch.float16,
+    #        attn_implementation="flash_attention_2",
+    #        device_map='cuda:0',
+    #        low_cpu_mem_usage=True,
+    #        quantization_config=quant_config
+    #    )
+    # else:
+    #   quant_config = BitsAndBytesConfig(load_in_8bit=True)
+    #    model = LlamaForCausalLM.from_pretrained(
+    #        model_args.model_name_or_path,
+    #        cache_dir=training_args.cache_dir,
+    #        torch_dtype=torch.bfloat16,
+    #        attn_implementation='eager',
+    #        device_map='cuda:0',
+    #        low_cpu_mem_usage=True,
+    #        quantization_config=quant_config
+    #    )
         # keep to load the model when starting from scratch
-        model.save_pretrained('/content/my_model_directory', safe_serialization=True)
+    #    model.save_pretrained('/content/my_model_directory', safe_serialization=True)
 
+    #### USE THE BELOW ON DEPT MACHINES TO LOAD THE BASE MODEL IN 8BIT FROM HUGGINGFACE
+    # More info on this in README
+    base_model_path = "arielfu/reproduced-htl"
+    quant_config = BitsAndBytesConfig(load_in_8bit=True)
+
+    # Load the base LLaMA model
+    model = LlamaForCausalLM.from_pretrained(
+        base_model_path,
+        torch_dtype=torch.bfloat16,
+        attn_implementation='eager',
+        device_map='cuda:0',
+        low_cpu_mem_usage=True,
+        quantization_config=quant_config
+    )
+    
     # Adding and configuring LoRA adapter
     lora_config = LoraConfig(
         target_modules=["q_proj", "k_proj"],
