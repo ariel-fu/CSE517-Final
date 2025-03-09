@@ -15,7 +15,7 @@ All of the data is available in `math_eval/dataset`
 ## 2.Train
 We run the following in a cell in Google Colab. It can also be run on a terminal, if `\ \n` is replaced with `` in a notepad. It is also important to note that we are using the directory format of Google Colab, and paths are prefixed with `\content\`. The model is checkpoint-ed every 1200 steps.
 
-!CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run \
+python -m torch.distributed.run \
  --nproc_per_node=1 \
  --master_port=6066 \
  --nnodes=1 \
