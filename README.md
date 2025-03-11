@@ -63,7 +63,7 @@ python -m torch.distributed.run \
  --fsdp_transformer_layer_cls_to_wrap LlamaDecoderLayer
 
 
-## 4.Eval
+## 4. Eval
 We run the following script in a cell in Google Colab, after specifying a dataset. Note that the evaluation code directly uses the model that has been saved to HuggingFace, not the model from the previous training (unless the model reaches step 300 and gets saved onto HuggingFace). The updated evaluation code retrieves the model from HuggingFace, provided the user authenticates into HuggingFace. We also provide the links to the reproduced model uploaded to HuggingFace in the report. 
 
 We support evaluation on the following datasets: 
