@@ -1,8 +1,6 @@
 
 # **Human Think Language Reproduction** 
-This repo contains the code and data for a replication for the paper: "[How Do Humans Write Code? Large Models Do It the Same Way Too](https://arxiv.org/pdf/2402.15729)"
-
-The original authors released their CodeLlama model at https://huggingface.co/seamoke111/HTL-CodeLlama-7B and their original code at https://github.com/seamoke/Human-Think-Language/.
+This repo contains the code and data for a replication for the paper: "[How Do Humans Write Code? Large Models Do It the Same Way Too](https://arxiv.org/pdf/2402.15729)". The original authors released their CodeLlama model at https://huggingface.co/seamoke111/HTL-CodeLlama-7B and their original code at https://github.com/seamoke/Human-Think-Language/.
 
 ## **Introduction**
 Hello! This is Ariel and Alex Fu's final project for CSE 517, Winter 2025. All of our modifications have been made in the `colab` branch. For this project, we completed the building, training, and evaluation of the model in Google Colab: https://colab.research.google.com/drive/1QgkGahjRLJOcYC65j9Io3uROB4iM11aZ?usp=sharing. The notebook contains all of the code for cloning the correct branch of the repo, installing the dependencies, setting HuggingFace credentials, training the model, and evaluating the model. 
