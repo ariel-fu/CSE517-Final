@@ -64,7 +64,7 @@ python -m torch.distributed.run \
 
 
 ## 4.Eval
-We run the following in a cell in Google Colab. Note that the evaluation code directly uses the model that has been saved to HuggingFace, not the model from the previous training (unless the model reaches step 300 and gets saved onto HuggingFace). The updated evaluation code retrieves the model from HuggingFace, provided the user logs into HuggingFace. We also provide the links to the HuggingFace models in the report. 
+We run the following script in a cell in Google Colab, after specifying a dataset. Note that the evaluation code directly uses the model that has been saved to HuggingFace, not the model from the previous training (unless the model reaches step 300 and gets saved onto HuggingFace). The updated evaluation code retrieves the model from HuggingFace, provided the user authenticates into HuggingFace. We also provide the links to the reproduced model uploaded to HuggingFace in the report. 
 
 We support evaluation on the following datasets: 
 1. GSM8K
@@ -78,7 +78,7 @@ We support evaluation on the following datasets:
 
 If an invalid dataset is requested, the evaluation throws an error and quits.
 
-!python /content/CSE517-Final/math_eval/run_open_htl.py \
+python /content/CSE517-Final/math_eval/run_open_htl.py \
     --model "htl_model" \
     --shots 0 \
     --stem_flan_type "pot_prompt" \
