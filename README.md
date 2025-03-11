@@ -15,6 +15,7 @@ The required packages are listed in requirements.txt. We have a cell in our Goog
 
 ## **How to Use**
 ## 1. Data
+The data for training and testing was provided by the authors in their original [GitHub](https://github.com/seamoke/Human-Think-Language/). We have also included them in this repo.
 All of the data for training and testing is available in `math_eval/dataset`. The data for training is in the file `math_eval/dataset/train_llama_data/llama_data_final32l.jsonl`.
 The authors provided several datasets. For our project, we only used the following datasets, following the order in the repo and the same styling:
 - SVAMP
