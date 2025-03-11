@@ -27,8 +27,13 @@ The authors provided several datasets. For our project, we only used the followi
 - numglue
 - simuleq
 
-## 2.Train
-We run the following script in a cell on Google Colab under the section "Run the training".
+## 2. Authentication
+The HTL model is based off the MAmmoTH Code Llama 7B model. The user must be authenticated into HuggingFace to properly fetch the model and train the HTL model. To evaluate the re-produced model, the user must also be authenticated into HuggingFace to properly fetch the trained model base and weights from HuggingFace.
+
+In the Google Colab, we have a dedicated cell to run to authenticate into HuggingFace. In the event that the user does not have a token for HuggingFace, one is provided in the comments. 
+
+## 3. Train
+We run the following script in a cell on Google Colab under the section "Run the training". The script runs the training code for 1 epoch, with the hyperparameters discussed in the final report.
 
 python -m torch.distributed.run \
  --nproc_per_node=1 \
@@ -58,7 +63,7 @@ python -m torch.distributed.run \
  --fsdp_transformer_layer_cls_to_wrap LlamaDecoderLayer
 
 
-## 3.Eval
+## 4.Eval
 We run the following in a cell in Google Colab. Note that the evaluation code directly uses the model that has been saved to HuggingFace, not the model from the previous training (unless the model reaches step 300 and gets saved onto HuggingFace). The updated evaluation code retrieves the model from HuggingFace, provided the user logs into HuggingFace. We also provide the links to the HuggingFace models in the report. 
 
 We support evaluation on the following datasets: 
