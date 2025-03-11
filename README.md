@@ -33,6 +33,8 @@ In the Google Colab, we have a dedicated cell to run to authenticate into Huggin
 ## 3. Train
 We run the following script in a cell on Google Colab under the section "Run the training". The script runs the training code for 1 epoch, with the hyperparameters discussed in the final report.
 
+Before running the training, the user must run the cell "Set the correct env variables" to properly set up the paths, number of GPUs, etc.
+
 python -m torch.distributed.run \
  --nproc_per_node=1 \
  --master_port=6066 \
